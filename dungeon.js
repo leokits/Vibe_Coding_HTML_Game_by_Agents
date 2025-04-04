@@ -1,13 +1,15 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
+// NOTE: THREE is now globally available via the script tag in index.html
 
-const TILE_SIZE = 2; // Size of each dungeon tile/block
+const TILE_SIZE = 2; // Size of each dungeon tile/block (now global)
+const PATH_WIDTH = 1; // Radius around center path to carve (0=1 tile, 1=3 tiles, 2=5 tiles)
 
-export class DungeonGenerator {
-    constructor(width, height, maxTunnels, maxLength) {
+class DungeonGenerator { // Removed 'export'
+    constructor(width, height, maxTunnels, maxLength, minTunnelLength = 2) { // Added minTunnelLength
         this.width = width; // Grid width
         this.height = height; // Grid height
         this.maxTunnels = maxTunnels; // Max number of tunnels
-        this.maxLength = maxLength; // Max length of each tunnel
+        this.maxLength = Math.max(1, maxLength); // Ensure max is at least 1
+        this.minTunnelLength = Math.max(1, minTunnelLength); // Ensure min is at least 1
         this.map = this.createMap(); // Initialize the grid
     }
 
@@ -40,22 +42,34 @@ export class DungeonGenerator {
                 (randomDirection[0] === lastDirection[0] && randomDirection[1] === lastDirection[1] && Math.random() < 0.8) // 80% chance to continue same direction
             );
 
-            let randomLength = Math.ceil(Math.random() * this.maxLength);
+            // Ensure length is within min/max bounds
+            let randomLength = this.minTunnelLength + Math.floor(Math.random() * (this.maxLength - this.minTunnelLength + 1));
             let tunnelLength = 0;
 
             while (tunnelLength < randomLength) {
-                // Check bounds
-                if (((currentRow === 0) && (randomDirection[0] === -1)) ||
-                    ((currentColumn === 0) && (randomDirection[1] === -1)) ||
-                    ((currentRow === this.height - 1) && (randomDirection[0] === 1)) ||
-                    ((currentColumn === this.width - 1) && (randomDirection[1] === 1))) {
-                    break; // Stop if hitting the edge
-                } else {
-                    this.map[currentRow][currentColumn] = 0; // 0 = Floor
-                    currentRow += randomDirection[0];
-                    currentColumn += randomDirection[1];
-                    tunnelLength++;
-                }
+                 // Check bounds for the *center* of the path + path width buffer
+                 const nextRow = currentRow + randomDirection[0];
+                 const nextCol = currentColumn + randomDirection[1];
+
+                 if (nextRow <= PATH_WIDTH || nextRow >= this.height - 1 - PATH_WIDTH ||
+                     nextCol <= PATH_WIDTH || nextCol >= this.width - 1 - PATH_WIDTH) {
+                     // console.log("Stopping tunnel near edge"); // Optional log
+                     break; // Stop if getting too close to the edge to carve full width
+                 }
+
+                 // Carve out wider path
+                 for (let r = -PATH_WIDTH; r <= PATH_WIDTH; r++) {
+                     for (let c = -PATH_WIDTH; c <= PATH_WIDTH; c++) {
+                         if (this.map[currentRow + r] && this.map[currentRow + r][currentColumn + c] !== undefined) {
+                              this.map[currentRow + r][currentColumn + c] = 0; // 0 = Floor
+                         }
+                     }
+                 }
+
+                 // Move the center
+                 currentRow = nextRow;
+                 currentColumn = nextCol;
+                 tunnelLength++;
             }
 
             if (tunnelLength > 0) { // If we made a tunnel segment
@@ -101,4 +115,4 @@ export class DungeonGenerator {
     }
 }
 
-export { TILE_SIZE };
+// No export needed for TILE_SIZE, it's now global in this context

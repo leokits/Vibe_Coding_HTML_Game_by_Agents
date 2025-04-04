@@ -8,9 +8,16 @@
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
     </style>
+    <!-- Load Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <!-- Removed EasyStarJS -->
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    <script type="module" src="game.js"></script> 
+
+    <!-- Load game scripts in order of dependency -->
+    <script src="dungeon.js"></script>
+    <script src="npc.js"></script>
+    <script src="game.js"></script>
 </body>
 </html>

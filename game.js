@@ -1,9 +1,7 @@
-import * as THREE from 'https://cdn.skypack.dev/three@0.132.2';
-import { DungeonGenerator, TILE_SIZE } from './dungeon.js';
-import { PlayerNPC, MonsterNPC } from './npc.js';
+// NOTE: THREE, DungeonGenerator, TILE_SIZE, PlayerNPC, MonsterNPC are globally available
 
 // Basic Scene Setup
-const scene = new THREE.Scene();
+const scene = new THREE.Scene(); // THREE is global
 scene.background = new THREE.Color(0x87ceeb); // Sky blue background
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -31,8 +29,9 @@ scene.add(directionalLight);
 // --- Dungeon Generation ---
 const dungeonWidth = 50; // Grid cells
 const dungeonHeight = 50; // Grid cells
+// Note: DungeonGenerator constructor now takes minTunnelLength (defaulting to 2)
 const dungeonGen = new DungeonGenerator(dungeonWidth, dungeonHeight, 75, 10); // width, height, maxTunnels, maxLength
-const dungeonMap = dungeonGen.generate();
+const dungeonMap = dungeonGen.generate(); // This is the grid
 dungeonGen.createGeometry(scene); // Add dungeon meshes to the scene
 
 // --- TODO: Find valid spawn points from dungeonMap ---
@@ -48,15 +47,28 @@ npcs.push(player);
 const numMonsters = 5;
 for (let i = 0; i < numMonsters; i++) {
     const monster = new MonsterNPC(scene, dungeonMap, dungeonWidth, dungeonHeight);
+    // console.log(`Created Monster ${i + 1} at:`, monster.mesh.position); // Keep minimal logs
     npcs.push(monster);
 }
-
+console.log("Total NPCs created:", npcs.length);
 
 // Game Loop
+let frameCount = 0;
 function animate() {
     requestAnimationFrame(animate);
 
     // --- Game Logic Updates ---
+    // Optional: Less frequent logging
+    // if (frameCount % 120 === 0) {
+    //     console.log(`--- Frame ${frameCount} ---`);
+    //     console.log(`Player Position: ${player.mesh.position.x.toFixed(2)}, ${player.mesh.position.z.toFixed(2)} | Target: ${player.target ? player.target.constructor.name : 'None'} | Health: ${player.health}`);
+    //     npcs.forEach((npc, index) => {
+    //         if (index > 0 && npc.health > 0) { // Log monsters only
+    //              console.log(`Monster ${index} Position: ${npc.mesh.position.x.toFixed(2)}, ${npc.mesh.position.z.toFixed(2)} | Target: ${npc.target ? npc.target.constructor.name : 'None'} | Health: ${npc.health}`);
+    //         }
+    //     });
+    // }
+    // frameCount++;
 
     // Update all NPCs
     npcs.forEach(npc => {
@@ -90,10 +102,3 @@ window.addEventListener('resize', () => {
 animate();
 
 console.log("3D ARPG Scene Initialized");
-
-// --- TODO ---
-// 1. Dungeon Generation Logic
-// 2. NPC Class/Logic (Player NPC, Monster NPCs)
-// 3. Movement and Pathfinding
-// 4. Combat System
-// 5. Asset Loading (Models, Textures)
