@@ -22,6 +22,27 @@
             background-color: #00ff00; /* Green fill for health */
             width: 100%; /* Full by default */
         }
+        .damage-text {
+            position: absolute;
+            color: yellow; /* Or red, white, etc. */
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 1px 1px 1px black;
+            pointer-events: none;
+            transform: translateX(-50%);
+            animation: float-up 1s ease-out forwards;
+            white-space: nowrap; /* Prevent wrapping */
+        }
+        @keyframes float-up {
+            from {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -30px); /* Move up */
+            }
+        }
     </style>
     <!-- Load Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>

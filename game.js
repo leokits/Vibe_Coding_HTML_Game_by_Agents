@@ -39,20 +39,51 @@ dungeonGen.createGeometry(scene); // Add dungeon meshes to the scene
 camera.position.set(0, TILE_SIZE * 10, TILE_SIZE * 5); // Adjust camera based on tile size
 camera.lookAt(0, 0, 0);
 
-// --- NPC Initialization ---
+// --- Texture Loading & NPC Initialization ---
+const textureLoader = new THREE.TextureLoader();
 const npcs = [];
-const player = new PlayerNPC(scene, dungeonMap, dungeonWidth, dungeonHeight);
-npcs.push(player);
+let player; // Declare player variable
 
-const numMonsters = 5;
-for (let i = 0; i < numMonsters; i++) {
-    const monster = new MonsterNPC(scene, dungeonMap, dungeonWidth, dungeonHeight);
-    // console.log(`Created Monster ${i + 1} at:`, monster.mesh.position); // Keep minimal logs
-    npcs.push(monster);
-}
-console.log("Total NPCs created:", npcs.length);
+// Load player texture first
+textureLoader.load(
+    'player_sprite.png', // Placeholder path
+    (playerTexture) => {
+        console.log("Player texture loaded.");
+        player = new PlayerNPC(scene, dungeonMap, dungeonWidth, dungeonHeight, playerTexture);
+        npcs.push(player);
 
-// Game Loop
+        // Load monster texture and create monsters *after* player is created
+        textureLoader.load(
+            'monster_sprite.png', // Placeholder path
+            (monsterTexture) => {
+                console.log("Monster texture loaded.");
+                const numMonsters = 5;
+                for (let i = 0; i < numMonsters; i++) {
+                    const monster = new MonsterNPC(scene, dungeonMap, dungeonWidth, dungeonHeight, monsterTexture);
+                    npcs.push(monster);
+                }
+                console.log("Total NPCs created:", npcs.length);
+                // Start the animation loop ONLY after all assets are loaded
+                animate();
+            },
+            undefined, // onProgress callback (optional)
+            (err) => {
+                console.error('Error loading monster texture:', err);
+                // Handle error: maybe create monsters with default color?
+                // For now, just log and don't start animation if textures fail
+            }
+        );
+    },
+    undefined, // onProgress callback (optional)
+    (err) => {
+        console.error('Error loading player texture:', err);
+         // Handle error: maybe create player with default color?
+         // For now, just log and don't start animation if textures fail
+    }
+);
+
+
+// Game Loop (Declare function, but call it only after textures load)
 let frameCount = 0;
 function animate() {
     requestAnimationFrame(animate);
@@ -118,9 +149,6 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }, false);
 
-// Start the game loop
-animate();
-
 // Helper function to convert 3D world position to 2D screen coordinates
 function worldToScreen(worldPosition, camera) {
     const vector = worldPosition.clone().project(camera);
@@ -131,5 +159,28 @@ function worldToScreen(worldPosition, camera) {
     const y = (vector.y * -0.5 + 0.5) * renderer.domElement.clientHeight;
     return { x, y };
 }
+
+// Function to show floating damage text
+function showDamageText(worldPosition, text) {
+    const screenPos = worldToScreen(worldPosition, camera);
+    if (!screenPos) return; // Don't show if off-screen
+
+    const textElement = document.createElement('div');
+    textElement.className = 'damage-text';
+    textElement.textContent = text;
+    textElement.style.left = `${screenPos.x}px`;
+    // Start slightly higher than health bar
+    textElement.style.top = `${screenPos.y - 35}px`;
+
+    document.body.appendChild(textElement);
+
+    // Remove the element after the animation completes (1 second)
+    setTimeout(() => {
+        if (textElement.parentNode) {
+            textElement.parentNode.removeChild(textElement);
+        }
+    }, 1000); // Match animation duration
+}
+
 
 console.log("3D ARPG Scene Initialized");

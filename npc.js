@@ -4,7 +4,8 @@ const NPC_HEIGHT = TILE_SIZE * 0.8;
 const NPC_WIDTH = TILE_SIZE * 0.5;
 
 class BaseNPC {
-    constructor(scene, map, mapWidth, mapHeight, color = 0xff0000) {
+    // Constructor now accepts texture OR color
+    constructor(scene, map, mapWidth, mapHeight, textureOrColor) {
         this.scene = scene;
         this.map = map; // The dungeon map grid
         this.mapWidth = mapWidth;
@@ -35,8 +36,16 @@ class BaseNPC {
             spawnPos = { x: 0, z: 0 }; // Fallback
         }
 
-        // Create 2D Sprite representation (placeholder square)
-        const spriteMaterial = new THREE.SpriteMaterial({ color: color });
+        // Create 2D Sprite representation using texture or color
+        const materialConfig = {};
+        if (textureOrColor instanceof THREE.Texture) {
+            materialConfig.map = textureOrColor;
+            materialConfig.transparent = true; // Assume texture has transparency
+        } else {
+            materialConfig.color = textureOrColor; // Fallback to color
+        }
+        const spriteMaterial = new THREE.SpriteMaterial(materialConfig);
+
         this.mesh = new THREE.Sprite(spriteMaterial); // Using 'mesh' variable name for simplicity
         this.mesh.scale.set(TILE_SIZE * 0.7, TILE_SIZE * 0.7, 1);
         this.mesh.position.set(spawnPos.x, TILE_SIZE * 0.5, spawnPos.z);
@@ -300,6 +309,10 @@ class BaseNPC {
     takeDamage(amount, allNPCs) {
         this.health -= amount;
         console.log(`${this.isPlayer ? 'Player' : `Monster_${this.mesh.uuid.substring(0, 4)}`} took ${amount} damage, health: ${this.health}`);
+
+        // Show damage text
+        showDamageText(this.mesh.position, `-${amount}`); // Call the global function from game.js
+
         if (this.health <= 0) {
             this.health = 0;
             this.die();
@@ -324,8 +337,8 @@ class BaseNPC {
 }
 
 class PlayerNPC extends BaseNPC {
-    constructor(scene, map, mapWidth, mapHeight) {
-        super(scene, map, mapWidth, mapHeight, 0x0000ff);
+    constructor(scene, map, mapWidth, mapHeight, textureOrColor) { // Accept texture/color
+        super(scene, map, mapWidth, mapHeight, textureOrColor || 0x0000ff); // Pass to base, default blue
         this.isPlayer = true;
         this.maxHealth = 1000; // Set max health for player
         this.health = this.maxHealth; // Start at full health
@@ -339,8 +352,8 @@ class PlayerNPC extends BaseNPC {
 }
 
 class MonsterNPC extends BaseNPC {
-    constructor(scene, map, mapWidth, mapHeight) {
-        super(scene, map, mapWidth, mapHeight, 0xff0000);
+    constructor(scene, map, mapWidth, mapHeight, textureOrColor) { // Accept texture/color
+        super(scene, map, mapWidth, mapHeight, textureOrColor || 0xff0000); // Pass to base, default red
         this.isPlayer = false;
         this.respawnDelay = 10000;
         this.respawnTimer = null;
