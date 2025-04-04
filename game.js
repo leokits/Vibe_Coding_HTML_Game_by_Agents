@@ -70,10 +70,30 @@ function animate() {
     // }
     // frameCount++;
 
-    // Update all NPCs
+    // Update all NPCs and their health bars
     npcs.forEach(npc => {
-        if (npc.health > 0) { // Only update living NPCs
-             npc.update(npcs); // Pass the list of all NPCs for targeting
+        if (npc.health > 0) {
+             npc.update(npcs);
+
+             // Update Health Bar Position
+             const screenPos = worldToScreen(npc.mesh.position, camera);
+             if (screenPos) {
+                 npc.healthBarContainer.style.display = 'block';
+                 // Position slightly above the sprite center
+                 npc.healthBarContainer.style.left = `${screenPos.x}px`;
+                 npc.healthBarContainer.style.top = `${screenPos.y - 20}px`; // Adjust offset as needed
+                 // Update fill percentage
+                 const healthPercent = (npc.health / npc.maxHealth) * 100;
+                 npc.healthBarFill.style.width = `${healthPercent}%`;
+             } else {
+                 npc.healthBarContainer.style.display = 'none'; // Hide if off-screen
+             }
+
+        } else {
+             // Hide health bar if dead
+             if (npc.healthBarContainer) {
+                 npc.healthBarContainer.style.display = 'none';
+             }
         }
     });
 
@@ -100,5 +120,16 @@ window.addEventListener('resize', () => {
 
 // Start the game loop
 animate();
+
+// Helper function to convert 3D world position to 2D screen coordinates
+function worldToScreen(worldPosition, camera) {
+    const vector = worldPosition.clone().project(camera);
+    if (vector.z > 1) { // Behind camera
+        return null;
+    }
+    const x = (vector.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+    const y = (vector.y * -0.5 + 0.5) * renderer.domElement.clientHeight;
+    return { x, y };
+}
 
 console.log("3D ARPG Scene Initialized");

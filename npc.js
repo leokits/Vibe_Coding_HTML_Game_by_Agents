@@ -18,7 +18,15 @@ class BaseNPC {
         this.lastAttackTime = 0;
         this.aggroRange = TILE_SIZE * 25; // Increased range (was 8) -> 50 units
         this.isPlayer = false; // Flag to distinguish player/monster for targeting
-        // Removed pathfinding properties: wanderTargetPosition, path, pathStep
+        this.maxHealth = 100; // Store max health
+        this.health = this.maxHealth; // Start at full health
+
+        // Stuck detection properties
+        this.lastPosition = new THREE.Vector3(); // Store last position
+        this.stuckTimer = 0; // Time spent potentially stuck
+        this.stuckCheckInterval = 0.5; // Seconds between checks
+        this.stuckThreshold = 1.5; // Seconds before considered stuck
+        this.lastStuckCheckTime = 0; // Track time for interval
 
         // Find a valid spawn point (floor tile)
         let spawnPos = this.findValidSpawn();
@@ -27,15 +35,23 @@ class BaseNPC {
             spawnPos = { x: 0, z: 0 }; // Fallback
         }
 
-        // Create 3D representation
-        const geometry = new THREE.BoxGeometry(NPC_WIDTH, NPC_HEIGHT, NPC_WIDTH);
-        const material = new THREE.MeshStandardMaterial({ color: color });
-        this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.castShadow = true;
-        this.mesh.position.set(spawnPos.x, NPC_HEIGHT / 2, spawnPos.z);
+        // Create 2D Sprite representation (placeholder square)
+        const spriteMaterial = new THREE.SpriteMaterial({ color: color });
+        this.mesh = new THREE.Sprite(spriteMaterial); // Using 'mesh' variable name for simplicity
+        this.mesh.scale.set(TILE_SIZE * 0.7, TILE_SIZE * 0.7, 1);
+        this.mesh.position.set(spawnPos.x, TILE_SIZE * 0.5, spawnPos.z);
         scene.add(this.mesh);
+        this.lastPosition.copy(this.mesh.position); // Initialize last position
 
-        console.log(`NPC created at ${spawnPos.x.toFixed(2)}, ${spawnPos.z.toFixed(2)}`);
+        // Create Health Bar HTML Elements
+        this.healthBarContainer = document.createElement('div');
+        this.healthBarContainer.className = 'health-bar-container';
+        this.healthBarFill = document.createElement('div');
+        this.healthBarFill.className = 'health-bar-fill';
+        this.healthBarContainer.appendChild(this.healthBarFill);
+        document.body.appendChild(this.healthBarContainer); // Add to body
+
+        console.log(`NPC sprite created at ${spawnPos.x.toFixed(2)}, ${spawnPos.z.toFixed(2)}`);
     }
 
     findValidSpawn() {
@@ -45,8 +61,8 @@ class BaseNPC {
             const gridY = Math.floor(Math.random() * this.mapHeight);
             const gridX = Math.floor(Math.random() * this.mapWidth);
             if (this.map[gridY] && this.map[gridY][gridX] === 0) {
-                const worldX = (gridX - this.mapWidth / 2 + 0.5) * TILE_SIZE; // Center of tile
-                const worldZ = (gridY - this.mapHeight / 2 + 0.5) * TILE_SIZE; // Center of tile
+                const worldX = (gridX - this.mapWidth / 2 + 0.5) * TILE_SIZE;
+                const worldZ = (gridY - this.mapHeight / 2 + 0.5) * TILE_SIZE;
                 return { x: worldX, z: worldZ };
             }
             attempts++;
@@ -54,7 +70,7 @@ class BaseNPC {
         return null;
     }
 
-    // --- Coordinate Conversion Helpers (Still useful for collision) ---
+    // --- Coordinate Conversion Helpers ---
     worldToGrid(worldPos) {
         const gridX = Math.floor((worldPos.x / TILE_SIZE) + (this.mapWidth / 2));
         const gridY = Math.floor((worldPos.z / TILE_SIZE) + (this.mapHeight / 2));
@@ -69,6 +85,13 @@ class BaseNPC {
         return new THREE.Vector3(worldX, this.mesh.position.y, worldZ);
     }
     // --- End Coordinate Conversion ---
+
+    // --- Path Following (Placeholder - Not used by current update logic) ---
+    followPath() {
+        // This function will be used when pathfinding is fully integrated
+        return false; // Default to path not being followed
+    }
+    // --- End Path Following ---
 
     findTarget(allNPCs) {
         let closestTarget = null;
@@ -85,10 +108,38 @@ class BaseNPC {
         this.target = closestTarget;
     }
 
-    // Update logic using simple movement + avoidance
+    // Update logic using simple movement + avoidance + stuck detection
     update(allNPCs) {
         if (this.health <= 0) return;
         const npcId = this.isPlayer ? 'Player' : `Monster_${this.mesh.uuid.substring(0, 4)}`;
+        const currentTime = Date.now() / 1000; // Time in seconds
+
+        // --- Stuck Detection Logic ---
+        let wasStuckAndTeleported = false;
+        // Only check if stuck when actively chasing a target
+        if (this.target && currentTime - this.lastStuckCheckTime > this.stuckCheckInterval) {
+            const distanceMoved = this.mesh.position.distanceTo(this.lastPosition);
+            if (distanceMoved < this.speed * this.stuckCheckInterval * 0.5) { // Moved less than half expected distance
+                this.stuckTimer += this.stuckCheckInterval;
+            } else {
+                this.stuckTimer = 0; // Reset if moved enough
+            }
+            this.lastPosition.copy(this.mesh.position); // Update last position for next check
+            this.lastStuckCheckTime = currentTime;
+
+            if (this.stuckTimer > this.stuckThreshold) {
+                console.warn(`${npcId} is stuck! Attempting teleport.`);
+                this.teleportToNearestFloor();
+                this.stuckTimer = 0; // Reset timer after teleport
+                wasStuckAndTeleported = true; // Skip normal movement this frame
+            }
+        } else if (!this.target) {
+             this.stuckTimer = 0; // Reset stuck timer if no target
+        }
+        // --- End Stuck Detection ---
+
+        // Skip the rest of the update if we just teleported
+        if (wasStuckAndTeleported) return;
 
         // --- 1. Target Acquisition ---
         const hadTarget = !!this.target;
@@ -124,7 +175,7 @@ class BaseNPC {
                 const collisionBuffer = NPC_WIDTH / 2 + 0.01;
                 const checkPosX = potentialNewPos.x + moveDirection.x * collisionBuffer;
                 const checkPosZ = potentialNewPos.z + moveDirection.z * collisionBuffer;
-                const gridPos = this.worldToGrid({x: checkPosX, z: checkPosZ}); // Use helper
+                const gridPos = this.worldToGrid({x: checkPosX, z: checkPosZ});
                 const mapValue = this.map[gridPos.y]?.[gridPos.x];
                 const canMove = mapValue === 0;
 
@@ -180,28 +231,66 @@ class BaseNPC {
         }
     }
 
-    // Simple random wandering (adjacent tile)
+    // Simple random wandering (adjacent tile - Reverted)
     randomWander() {
-        // Pick a random direction (or stay put sometimes)
-        const directions = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]; // Stay, Up, Down, Left, Right (Grid coords)
+        const directions = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
         const randomGridMove = directions[Math.floor(Math.random() * directions.length)];
-
-        if (randomGridMove[0] === 0 && randomGridMove[1] === 0) return; // Stay put
+        if (randomGridMove[0] === 0 && randomGridMove[1] === 0) return;
 
         const currentGridPos = this.worldToGrid(this.mesh.position);
         const nextGridX = currentGridPos.x + randomGridMove[1];
         const nextGridY = currentGridPos.y + randomGridMove[0];
 
-        // Check if the target grid cell is valid floor
         if (this.map[nextGridY] && this.map[nextGridY][nextGridX] === 0) {
             const targetWorldPos = this.gridToWorld({x: nextGridX, y: nextGridY});
             const moveDirection = new THREE.Vector3().subVectors(targetWorldPos, this.mesh.position).normalize();
             const potentialNewPos = this.mesh.position.clone().add(moveDirection.multiplyScalar(this.speed));
             this.mesh.position.copy(potentialNewPos);
-            // Optionally face direction
-            // this.mesh.lookAt(potentialNewPos.x, this.mesh.position.y, potentialNewPos.z);
         }
     }
+
+    // --- Stuck Teleport Logic ---
+    findNearestFloorTile() {
+        const currentGridPos = this.worldToGrid(this.mesh.position);
+        let nearestFloor = null;
+        let minDistanceSq = Infinity;
+        const searchRadius = 5; // How far out to search
+
+        for (let r = -searchRadius; r <= searchRadius; r++) {
+            for (let c = -searchRadius; c <= searchRadius; c++) {
+                const checkY = currentGridPos.y + r;
+                const checkX = currentGridPos.x + c;
+
+                // Check bounds and if it's a floor tile
+                if (checkY >= 0 && checkY < this.mapHeight &&
+                    checkX >= 0 && checkX < this.mapWidth &&
+                    this.map[checkY][checkX] === 0)
+                {
+                    const distSq = r*r + c*c;
+                    if (distSq < minDistanceSq) {
+                        minDistanceSq = distSq;
+                        nearestFloor = { x: checkX, y: checkY };
+                    }
+                }
+            }
+        }
+        return nearestFloor; // Returns grid coordinates or null
+    }
+
+    teleportToNearestFloor() {
+        const nearestFloorGrid = this.findNearestFloorTile();
+        if (nearestFloorGrid) {
+            const teleportPos = this.gridToWorld(nearestFloorGrid);
+            console.log(`Teleporting to nearest floor at grid (${nearestFloorGrid.x}, ${nearestFloorGrid.y}) -> world (${teleportPos.x.toFixed(2)}, ${teleportPos.z.toFixed(2)})`);
+            this.mesh.position.set(teleportPos.x, this.mesh.position.y, teleportPos.z);
+            this.lastPosition.copy(this.mesh.position); // Update last position after teleport
+        } else {
+            console.error("Could not find any nearby floor tile to teleport to!");
+            // Might happen if NPC gets completely walled in somehow
+        }
+    }
+    // --- End Stuck Teleport ---
+
 
     attack(target, allNPCs) {
         console.log(`${this.constructor.name} attacks ${target.constructor.name}`);
@@ -217,7 +306,6 @@ class BaseNPC {
             allNPCs.forEach(npc => {
                 if (npc.target === this) {
                     npc.target = null;
-                    // No path properties to clear in this version
                     console.log(`${npc.isPlayer ? 'Player' : `Monster_${npc.mesh.uuid.substring(0, 4)}`} target died, clearing target.`);
                 }
             });
@@ -228,8 +316,10 @@ class BaseNPC {
         const npcId = this.isPlayer ? 'Player' : `Monster_${this.mesh.uuid.substring(0, 4)}`;
         console.log(`${npcId} died`);
         this.scene.remove(this.mesh);
+        if (this.healthBarContainer && this.healthBarContainer.parentNode) {
+            this.healthBarContainer.parentNode.removeChild(this.healthBarContainer);
+        }
         this.target = null;
-        // No path properties to clear in this version
     }
 }
 
@@ -237,7 +327,8 @@ class PlayerNPC extends BaseNPC {
     constructor(scene, map, mapWidth, mapHeight) {
         super(scene, map, mapWidth, mapHeight, 0x0000ff);
         this.isPlayer = true;
-        this.health = 1000;
+        this.maxHealth = 1000; // Set max health for player
+        this.health = this.maxHealth; // Start at full health
         console.log("Player NPC initialized with increased health.");
     }
 
@@ -265,7 +356,6 @@ class MonsterNPC extends BaseNPC {
         console.log(`${npcId} died. Scheduling respawn in ${this.respawnDelay / 1000}s.`);
         this.scene.remove(this.mesh);
         this.target = null;
-        // No path properties to clear
         this.health = 0;
 
         if (this.respawnTimer) clearTimeout(this.respawnTimer);
@@ -284,7 +374,6 @@ class MonsterNPC extends BaseNPC {
         this.mesh.position.set(spawnPos.x, NPC_HEIGHT / 2, spawnPos.z);
         this.health = 100;
         this.target = null;
-        // No path properties to reset
         this.lastAttackTime = 0;
         this.scene.add(this.mesh);
         this.respawnTimer = null;
